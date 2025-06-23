@@ -1,3 +1,3 @@
-# keerthana_flutter_app
+# Ammu App
 
 A new Flutter project.
