@@ -8,7 +8,7 @@
 <uses-permission android:name="android.permission.SEND_SMS" />
 
     <application
-        android:label="keerthana_flutter_app"
+        android:label="ammu_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

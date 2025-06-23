@@ -9,7 +9,7 @@ import 'dart:convert';
 import 'dart:async';
 
 // Import the new HeatwaveScreen
-import 'package:keerthana_flutter_app/heatwave_screen.dart'; // Adjust 'ammu' to your project name
+import 'package:ammu_app/heatwave_screen.dart'; // Adjust 'ammu' to your project name
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
