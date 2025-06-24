@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart'; // Import for Firebase logout
 import 'package:url_launcher/url_launcher.dart'; // For launching phone calls
 
 // Assuming these files exist in your project structure:
-import 'signup_page.dart';
+import 'auth/signup_page.dart';
 import 'heatwave_screen.dart';
 
 import 'gps_tracking_screen.dart';

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'signup_page.dart';
-import 'login_page.dart';
+import 'auth/signup_page.dart';
+import 'auth/login_page.dart';
 import 'dart:async';
-import 'database_helper.dart';
+import 'package:ammu_app/helper/database_helper.dart';
 import 'firebase_options.dart';
-import 'add_device_screen.dart';
+import 'screens/bluetooth/add_device_screen.dart';
 
 void main() async {
   // Initialize Firebase

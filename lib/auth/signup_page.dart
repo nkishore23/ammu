@@ -251,46 +251,47 @@ class _SignUpPageState extends State<SignUpPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white, // Screen background fills edge to edge.
-      body: SafeArea(
-        child: Column(
-          // Use Column to stack the top illustration and the scrollable form.
-          children: [
-            // Top Illustration: Designed to be edge-to-edge horizontally.
-            ClipPath(
-              clipper: const CurveClipper(), // Added const
-              child: Container(
-                color: const Color(0xFF003366), // Added const
-                height: 200,
-                // `width: double.infinity` is implicit as Column child expands horizontally.
-                child: const Center(
-                  // Added const to Center and its content.
-                  child: SizedBox(
-                    // Use SizedBox for fixed size for the inner icon container.
-                    width: 100,
-                    height: 100,
-                    child: DecoratedBox(
-                      // More efficient for simple decorations than Container.
-                      decoration: BoxDecoration(
-                        // Added const
-                        color: Colors.white,
-                        borderRadius: BorderRadius.all(
-                            Radius.circular(50)), // Consistent borderRadius
-                      ),
-                      child: Icon(
-                        // Added const
-                        Icons.person_add,
+      body: Column(
+        // Use Column to stack the top illustration and the scrollable form.
+        children: [
+          // Top Illustration: Designed to be edge-to-edge horizontally.
+          // This ClipPath will now extend to the very top of the screen.
+          ClipPath(
+            clipper: const CurveClipper(), // Added const
+            child: Container(
+              color: const Color(0xFF003366), // Added const
+              height: 200,
+              // `width: double.infinity` is implicit as Column child expands horizontally.
+              child: Center(
+                // Removed const here because of the Image.asset
+                child: SizedBox(
+                  // Use SizedBox for fixed size for the inner image container.
+                  width: 200,
+                  height: 200,
+                  child: Image.asset(
+                    // Replaced Icon with Image.asset
+                    'assets/signup.png', // Path to your image asset
+                    fit: BoxFit
+                        .contain, // Ensures the image fits within the bounds
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(
+                        // Fallback to an icon if image fails to load
+                        Icons.error,
                         size: 50,
-                        color: Color(0xFF003366), // Added const
-                      ),
-                    ),
+                        color: Color(0xFF003366),
+                      );
+                    },
                   ),
                 ),
               ),
             ),
+          ),
 
-            // Scrollable Form Content: This section gets the horizontal padding.
-            Expanded(
-              // Takes up the remaining vertical space.
+          // Scrollable Form Content: This section now has SafeArea applied.
+          Expanded(
+            // Takes up the remaining vertical space.
+            child: SafeArea(
+              // Moved SafeArea here
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
                     horizontal:
@@ -530,7 +531,7 @@ class _SignUpPageState extends State<SignUpPage> {
                               'Or Sign Up with',
                               style: TextStyle(
                                   color: Colors
-                                      .grey), // Removed const due to dynamic color
+                                      .grey), // Removed const due to dynamic color/fontSize
                             ),
                           ),
                           Expanded(
@@ -605,6 +606,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                   color: Color(0xFF003366),
                                   decoration: TextDecoration.underline,
                                 ),
+                                recognizer: null, // No onTap for now
                               ),
                             ],
                           ),
@@ -616,8 +618,8 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

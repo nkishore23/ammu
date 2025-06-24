@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart'; // Keep if used elsewhere, not directly in this screen
+//import 'package:url_launcher/url_launcher.dart'; // Keep if used elsewhere, not directly in this screen
 import 'smsaddonscreen.dart'; // Import SMS Services Screen
-import 'bluetooth_manager.dart'; // Assume this file exists and manages Bluetooth logic
+import '../../services/bluetooth_manager.dart'; // Assume this file exists and manages Bluetooth logic
 
 class BluetoothScreen extends StatelessWidget {
   const BluetoothScreen({super.key});
