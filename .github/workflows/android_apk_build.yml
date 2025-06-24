@@ -37,7 +37,7 @@ jobs:
           # IMPORTANT: Specify a concrete, stable Flutter version.
           # You can find the latest stable version by running 'flutter --version' locally.
           # Example: '3.22.2'
-          flutter-version: '3.22.2' # Changed from '3.x.x' to a specific stable version
+          flutter-version: '3.23.0' # Changed from '3.x.x' to a specific stable version
           channel: 'stable' # or 'beta', 'master'
 
       # Get Flutter project dependencies
