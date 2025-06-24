@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "591533067808",
+    "project_id": "kids-ammu-app",
+    "storage_bucket": "kids-ammu-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:591533067808:android:ceb75f9bae0691f24c7645",
+        "android_client_info": {
+          "package_name": "com.example.ammu_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAR_pWj3FPvq44sgTpHVVPc1BwYxTDenyo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

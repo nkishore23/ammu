@@ -1,431 +1,557 @@
-// lib/heatwave_screen.dart
 import 'package:flutter/material.dart';
+import 'package:syncfusion_flutter_gauges/gauges.dart' as gauges;
+import 'package:syncfusion_flutter_charts/charts.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
-import 'package:intl/intl.dart';
-import 'service/weather_service.dart'; // Ensure correct import path
 
-class HeatwaveScreen extends StatefulWidget {
-  const HeatwaveScreen({Key? key}) : super(key: key);
+// Weather Service with proper API integration
+class WeatherService {
+  final String apiKey = '0d7b64fc4a902365b77a69f85f8a1396';
+  final String baseUrl = 'https://api.openweathermap.org/data/2.5';
 
-  @override
-  State<HeatwaveScreen> createState() => _HeatwaveScreenState();
+  Future<Map<String, dynamic>> fetchWeatherForecast(String cityName) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/forecast?q=$cityName&appid=$apiKey&units=metric'),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to load weather data: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchCurrentWeather(String cityName) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/weather?q=$cityName&appid=$apiKey&units=metric'),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception(
+            'Failed to load current weather: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
 }
 
-class _HeatwaveScreenState extends State<HeatwaveScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _meterController;
-  late Animation<double> _meterAnimation;
+class HeatwavesIndicatorScreen extends StatefulWidget {
+  @override
+  _HeatwavesIndicatorScreenState createState() =>
+      _HeatwavesIndicatorScreenState();
+}
 
-  int currentHeatIndex = 0;
-  String heatStatus = "LOADING...";
-  String _currentCity = "Loading...";
+class _HeatwavesIndicatorScreenState extends State<HeatwavesIndicatorScreen> {
+  final WeatherService _weatherService = WeatherService();
+  final TextEditingController _locationController = TextEditingController();
 
-  List<double> hourlyData = [];
-  List<Map<String, dynamic>> weeklyWeather = [];
-
-  final TextEditingController _searchController = TextEditingController();
-  final WeatherService _weatherService =
-      WeatherService(); // Instantiate your service
+  bool _isLoading = false;
+  String _currentLocation = 'Your Location';
+  double _currentHeatIndex = 150; // Default value matching mockup
+  List<ChartData> _hourlyData = [];
+  List<WeatherData> _weeklyWeather = [];
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _meterController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    );
-    _setupAnimation();
-    _fetchWeatherData('Chennai'); // Initial fetch for Chennai
+    _initializeDefaultData();
   }
 
-  void _setupAnimation() {
-    // Ensure animation end value is not negative if currentHeatIndex is 0
-    _meterAnimation = Tween<double>(
-      begin: 0.0,
-      end: currentHeatIndex.toDouble() / 200.0, // Cast to double
-    ).animate(
-      CurvedAnimation(parent: _meterController, curve: Curves.easeInOut),
-    );
-    if (!_meterController.isAnimating) {
-      _meterController.forward(from: 0.0);
+  void _initializeDefaultData() {
+    // Show default data matching the mockup
+    _hourlyData = [
+      ChartData('03', 75, _getHeatIndexColor(75)),
+      ChartData('06', 90, _getHeatIndexColor(90)),
+      ChartData('09', 95, _getHeatIndexColor(95)),
+      ChartData('12', 135, _getHeatIndexColor(135)), // Peak hour
+      ChartData('15', 115, _getHeatIndexColor(115)),
+      ChartData('18', 85, _getHeatIndexColor(85)),
+      ChartData('21', 70, _getHeatIndexColor(70)),
+      ChartData('00', 65, _getHeatIndexColor(65)),
+      ChartData('03', 70, _getHeatIndexColor(70)),
+      ChartData('06', 80, _getHeatIndexColor(80)),
+      ChartData('09', 90, _getHeatIndexColor(90)),
+      ChartData('12', 85, _getHeatIndexColor(85)),
+    ];
+
+    _weeklyWeather = [
+      WeatherData('Today', 22, Colors.green, Icons.wb_sunny),
+      WeatherData('Mon', 24, Colors.yellow, Icons.cloud),
+      WeatherData('Tue', 22, Colors.green, Icons.grain),
+      WeatherData('Wed', 23, Colors.green, Icons.wb_sunny_outlined),
+      WeatherData('Thu', 21, Colors.yellow, Icons.cloud),
+      WeatherData('Fri', 26, Colors.red, Icons.wb_sunny),
+      WeatherData('Sat', 22, Colors.green, Icons.wb_sunny),
+    ];
+  }
+
+  Color _getHeatIndexColor(double heatIndex) {
+    if (heatIndex < 80) return Colors.green;
+    if (heatIndex < 90) return Colors.lightGreen;
+    if (heatIndex < 105) return Colors.yellow[700]!;
+    if (heatIndex < 130) return Colors.orange;
+    return Colors.red;
+  }
+
+  String _getHeatIndexStatus(double heatIndex) {
+    if (heatIndex < 80) return 'GOOD';
+    if (heatIndex < 90) return 'CAUTION';
+    if (heatIndex < 105) return 'EXTREME CAUTION';
+    if (heatIndex < 130) return 'DANGER';
+    return 'NOT GOOD'; // Changed to match mockup
+  }
+
+  IconData _getWeatherIcon(String weatherMain) {
+    switch (weatherMain.toLowerCase()) {
+      case 'clear':
+        return Icons.wb_sunny;
+      case 'clouds':
+        return Icons.cloud;
+      case 'rain':
+        return Icons.grain;
+      case 'snow':
+        return Icons.ac_unit;
+      case 'thunderstorm':
+        return Icons.flash_on;
+      case 'drizzle':
+        return Icons.grain;
+      case 'mist':
+      case 'fog':
+        return Icons.cloud;
+      default:
+        return Icons.wb_sunny;
     }
   }
 
-  Future<void> _fetchWeatherData(String cityName) async {
+  double _calculateHeatIndex(double tempCelsius, double humidity) {
+    // Convert Celsius to Fahrenheit
+    double tempF = (tempCelsius * 9 / 5) + 32;
+
+    // Simplified heat index calculation
+    if (tempF < 80) {
+      return tempF; // Return Fahrenheit value for consistency
+    }
+
+    // Rothfusz regression equation
+    double hi = -42.379 +
+        2.04901523 * tempF +
+        10.14333127 * humidity -
+        0.22475541 * tempF * humidity -
+        0.00683783 * tempF * tempF -
+        0.05481717 * humidity * humidity +
+        0.00122874 * tempF * tempF * humidity +
+        0.00085282 * tempF * humidity * humidity -
+        0.00000199 * tempF * tempF * humidity * humidity;
+
+    // Adjustments for low humidity
+    if (humidity < 13 && tempF >= 80 && tempF <= 112) {
+      hi -= ((13 - humidity) / 4) * math.sqrt((17 - (tempF - 95).abs()) / 17);
+    }
+
+    // Adjustments for high humidity
+    if (humidity > 85 && tempF >= 80 && tempF <= 87) {
+      hi += ((humidity - 85) / 10) * ((87 - tempF) / 5);
+    }
+
+    return hi;
+  }
+
+  Future<void> _fetchWeatherData(String location) async {
+    if (location.trim().isEmpty) return;
+
     setState(() {
-      _currentCity = cityName;
-      currentHeatIndex = 0;
-      heatStatus = "Loading...";
-      hourlyData = [];
-      weeklyWeather = [];
+      _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      // Call the service method which handles geocoding internally
-      final data = await _weatherService.fetchWeatherForecast(cityName);
+      // Fetch both current weather and forecast
+      final forecastData = await _weatherService.fetchWeatherForecast(location);
+      final currentData = await _weatherService.fetchCurrentWeather(location);
 
-      // --- Start of Data Parsing ---
-      if (data['list'] == null || !(data['list'] is List)) {
-        throw Exception('API response "list" is missing or malformed.');
-      }
-
-      final List<dynamic> forecastList = data['list'];
-
-      // Hourly Data (first 24 entries)
-      List<double> fetchedHourlyData = [];
-      for (int i = 0; i < math.min(forecastList.length, 24); i++) {
-        final item = forecastList[i];
-        if (item != null &&
-            item.containsKey('main') &&
-            item['main'] != null &&
-            item['main'].containsKey('temp')) {
-          final temp = (item['main']['temp'] as num).toDouble();
-          fetchedHourlyData.add(temp * 4); // Multiplying by 4 as per your logic
-        } else {
-          fetchedHourlyData.add(0.0); // Add default if data is missing
-          print('Warning: Missing temperature data for hourly item $i');
-        }
-      }
-
-      // Weekly Weather (unique days)
-      List<Map<String, dynamic>> fetchedWeeklyWeather = [];
-      final uniqueDates = <String>{};
-
-      for (var item in forecastList) {
-        if (item == null || !item.containsKey('dt')) continue;
-
-        final dateTime =
-            DateTime.fromMillisecondsSinceEpoch((item['dt'] as int) * 1000);
-        final dateKey =
-            DateFormat('EEE').format(dateTime); // e.g., 'Mon', 'Tue'
-
-        // Only add if this is the first entry for this day
-        if (uniqueDates.add(dateKey)) {
-          if (item.containsKey('main') &&
-              item['main'] != null &&
-              item['main'].containsKey('temp')) {
-            Color tempColor;
-            final temp = (item['main']['temp'] as num).toDouble();
-            if (temp <= 22) {
-              tempColor = Colors.green;
-            } else if (temp <= 28) {
-              tempColor = Colors.amber;
-            } else if (temp <= 34) {
-              tempColor = Colors.orange;
-            } else {
-              tempColor = Colors.red;
-            }
-
-            IconData weatherIcon = Icons.help_outline; // Default icon
-            if (item.containsKey('weather') &&
-                item['weather'] is List &&
-                item['weather'].isNotEmpty) {
-              final weatherMain = item['weather'][0]['main'];
-              if (weatherMain == 'Clouds') {
-                weatherIcon = Icons.cloud;
-              } else if (weatherMain == 'Rain') {
-                weatherIcon = Icons.grain;
-              } else if (weatherMain == 'Clear') {
-                weatherIcon = Icons.wb_sunny;
-              } else if (weatherMain == 'Thunderstorm') {
-                weatherIcon = Icons.flash_on;
-              } else if (weatherMain == 'Drizzle') {
-                weatherIcon = Icons.grain;
-              } else if (weatherMain == 'Snow') {
-                weatherIcon = Icons.ac_unit;
-              } else if (weatherMain == 'Mist' ||
-                  weatherMain == 'Smoke' ||
-                  weatherMain == 'Haze' ||
-                  weatherMain == 'Dust' ||
-                  weatherMain == 'Fog' ||
-                  weatherMain == 'Sand' ||
-                  weatherMain == 'Ash' ||
-                  weatherMain == 'Squall' ||
-                  weatherMain == 'Tornado') {
-                weatherIcon = Icons.cloud_queue; // General hazy/misty icon
-              }
-            }
-
-            fetchedWeeklyWeather.add({
-              'day': dateKey,
-              'temp': '${temp.round()}°',
-              'color': tempColor,
-              'icon': weatherIcon,
-            });
-          }
-          if (fetchedWeeklyWeather.length >= 7) {
-            break; // Stop after collecting 7 unique days
-          }
-        }
-      }
-      // --- End of Data Parsing ---
+      _processWeatherData(forecastData, currentData);
 
       setState(() {
-        hourlyData = fetchedHourlyData;
-        weeklyWeather = fetchedWeeklyWeather;
-
-        // Update currentHeatIndex and heatStatus based on the first hourly data point
-        if (hourlyData.isNotEmpty) {
-          currentHeatIndex = hourlyData[0].round();
-          heatStatus = _getHeatStatus(currentHeatIndex.toDouble());
-        } else {
-          currentHeatIndex = 0;
-          heatStatus = "No data available";
-        }
-        _setupAnimation(); // Re-run animation with new heat index
+        _currentLocation = forecastData['city']['name'] ?? location;
+        _isLoading = false;
       });
     } catch (e) {
-      print('Error fetching weather: $e'); // Log the actual error
       setState(() {
-        _currentCity = "Error";
-        heatStatus = "Error fetching data";
-        currentHeatIndex = 0; // Reset heat index on error
-        hourlyData = []; // Clear data on error
-        weeklyWeather = []; // Clear data on error
-        _setupAnimation(); // Reset animation
+        _errorMessage =
+            'Failed to fetch weather data for "$location". Please check the city name and try again.';
+        _isLoading = false;
       });
-      // Show snackbar for user feedback
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load weather: ${e.toString()}')),
+        SnackBar(
+          content: Text('Error: Unable to fetch weather data'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
       );
     }
   }
 
-  // Helper functions for UI logic
-  Color _getHeatColor(double value) {
-    if (value <= 80) return Colors.green;
-    if (value <= 120) return Colors.yellow; // This is the 'amber' in the image
-    if (value <= 150) return Colors.orange;
-    return Colors.red; // This is the 'brown' in the image
-  }
+  void _processWeatherData(
+      Map<String, dynamic> forecastData, Map<String, dynamic> currentData) {
+    try {
+      final List<dynamic> forecastList = forecastData['list'] ?? [];
 
-  String _getHeatStatus(double value) {
-    if (value <= 80) return "GOOD";
-    if (value <= 120) return "MODERATE";
-    if (value <= 150) return "NOT GOOD";
-    return "DANGEROUS";
-  }
+      // Process current weather for heat index
+      if (currentData['main'] != null) {
+        final double currentTemp =
+            (currentData['main']['temp'] ?? 20.0).toDouble();
+        final double currentHumidity =
+            (currentData['main']['humidity'] ?? 50.0).toDouble();
+        _currentHeatIndex = _calculateHeatIndex(currentTemp, currentHumidity);
+      }
 
-  @override
-  void dispose() {
-    _meterController.dispose();
-    _searchController.dispose();
-    super.dispose();
+      // Process hourly data (next 24 hours - extended for better chart view)
+      List<ChartData> newHourlyData = [];
+      for (int i = 0; i < math.min(12, forecastList.length); i++) {
+        final forecast = forecastList[i];
+        final DateTime dateTime =
+            DateTime.fromMillisecondsSinceEpoch((forecast['dt'] ?? 0) * 1000);
+        final double temp = (forecast['main']['temp'] ?? 20.0).toDouble();
+        final double humidity =
+            (forecast['main']['humidity'] ?? 50.0).toDouble();
+        final double heatIndex = _calculateHeatIndex(temp, humidity);
+
+        final hour = dateTime.hour.toString().padLeft(2, '0');
+        newHourlyData
+            .add(ChartData(hour, heatIndex, _getHeatIndexColor(heatIndex)));
+      }
+
+      // Process weekly data (group by day)
+      List<WeatherData> newWeeklyData = [];
+      Map<String, List<dynamic>> dailyForecasts = {};
+
+      // Group forecasts by day
+      for (int i = 0; i < forecastList.length; i++) {
+        final forecast = forecastList[i];
+        final DateTime dateTime =
+            DateTime.fromMillisecondsSinceEpoch((forecast['dt'] ?? 0) * 1000);
+        final dayKey = '${dateTime.year}-${dateTime.month}-${dateTime.day}';
+
+        if (!dailyForecasts.containsKey(dayKey)) {
+          dailyForecasts[dayKey] = [];
+        }
+        dailyForecasts[dayKey]!.add(forecast);
+      }
+
+      // Process daily forecasts
+      List<String> dayNames = [
+        'Today',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat'
+      ];
+      int dayIndex = 0;
+
+      dailyForecasts.forEach((dayKey, dayForecasts) {
+        if (dayIndex < 7 && dayForecasts.isNotEmpty) {
+          // Calculate average temperature for the day
+          double totalTemp = 0;
+          double totalHumidity = 0;
+          String dominantWeather =
+              dayForecasts[0]['weather'][0]['main'] ?? 'Clear';
+
+          for (var forecast in dayForecasts) {
+            totalTemp += (forecast['main']['temp'] ?? 20.0).toDouble();
+            totalHumidity += (forecast['main']['humidity'] ?? 50.0).toDouble();
+          }
+
+          double avgTemp = totalTemp / dayForecasts.length;
+          double avgHumidity = totalHumidity / dayForecasts.length;
+          double avgHeatIndex = _calculateHeatIndex(avgTemp, avgHumidity);
+
+          newWeeklyData.add(WeatherData(
+            dayNames[dayIndex],
+            avgTemp.round(),
+            _getHeatIndexColor(avgHeatIndex),
+            _getWeatherIcon(dominantWeather),
+          ));
+          dayIndex++;
+        }
+      });
+
+      setState(() {
+        _hourlyData = newHourlyData;
+        _weeklyWeather = newWeeklyData;
+      });
+    } catch (e) {
+      print('Error processing weather data: $e');
+      setState(() {
+        _errorMessage = 'Error processing weather data';
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E3A8A),
-        title: const Text(
+        backgroundColor: Color(0xFF003366), // Matching the blue from mockup
+        title: Text(
           'Heatwaves Indicator',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 18,
             fontWeight: FontWeight.w500,
+            fontSize: 20,
           ),
         ),
-        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
         ),
         elevation: 0,
+        centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Location Search
+            // Location Search Bar - Matching mockup style
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              margin: EdgeInsets.only(bottom: 24),
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(25),
+                borderRadius: BorderRadius.circular(30),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.grey.withOpacity(0.1),
                     spreadRadius: 1,
-                    blurRadius: 3,
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
                   ),
                 ],
               ),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  icon: Icon(Icons.search, color: Colors.grey[400]),
-                  hintText: 'Search Location',
-                  hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
-                  border: InputBorder.none,
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.clear, color: Colors.grey[400]),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {
-                              _currentCity = "Search a city...";
-                              hourlyData = [];
-                              weeklyWeather = [];
-                              currentHeatIndex = 0; // Reset heat index
-                              heatStatus = "Enter city"; // Reset status
-                              _setupAnimation(); // Reset animation
-                            });
-                          },
-                        )
-                      : null,
-                ),
-                onSubmitted: (value) {
-                  if (value.isNotEmpty) {
-                    _fetchWeatherData(value);
-                  }
-                },
+              child: Row(
+                children: [
+                  Icon(Icons.search, color: Colors.grey[400], size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _locationController,
+                      decoration: InputDecoration(
+                        hintText: _currentLocation,
+                        border: InputBorder.none,
+                        hintStyle: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 16,
+                        ),
+                      ),
+                      onSubmitted: (value) {
+                        if (value.trim().isNotEmpty) {
+                          _fetchWeatherData(value);
+                        }
+                      },
+                    ),
+                  ),
+                  if (_isLoading)
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
               ),
             ),
 
-            const SizedBox(height: 40),
-
-            // Heat Index Meter
-            Center(
-              child: SizedBox(
-                width: 280,
-                height: 280,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Meter Background
-
-                    // Animated Meter Progress
-                    AnimatedBuilder(
-                      animation: _meterAnimation,
-                      builder: (context, child) {
-                        return CustomPaint(
-                          size: const Size(280, 280),
-                          painter: HeatMeterPainter(
-                            currentHeatIndexValue: currentHeatIndex.toDouble() *
-                                _meterAnimation.value, // Animate the value
-                            strokeWidth: 20,
+            // Main Gauge Card - Redesigned to match mockup exactly
+            Container(
+              margin: EdgeInsets.only(bottom: 24),
+              padding: EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.08),
+                    spreadRadius: 1,
+                    blurRadius: 15,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  SizedBox(
+                    height: 280,
+                    child: gauges.SfRadialGauge(
+                      axes: <gauges.RadialAxis>[
+                        gauges.RadialAxis(
+                          minimum: 50,
+                          maximum: 200,
+                          startAngle: 180,
+                          endAngle: 0,
+                          showLabels: true,
+                          showTicks: true,
+                          interval: 50,
+                          labelOffset: 15,
+                          tickOffset: -2,
+                          minorTicksPerInterval: 0,
+                          axisLineStyle: gauges.AxisLineStyle(
+                            thickness: 1,
+                            color: Colors.grey[300],
                           ),
-                        );
-                      },
-                    ),
-                    // Center Content
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        AnimatedBuilder(
-                          animation: _meterAnimation,
-                          builder: (context, child) {
-                            int displayValue =
-                                (_meterAnimation.value * currentHeatIndex)
-                                    .round();
-                            return Text(
-                              displayValue.toString(),
-                              style: const TextStyle(
-                                fontSize: 48,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
+                          majorTickStyle: gauges.MajorTickStyle(
+                            length: 8,
+                            thickness: 1,
+                            color: Colors.grey[400],
+                          ),
+                          ranges: <gauges.GaugeRange>[
+                            // Green range (Good) - 50 to 100
+                            gauges.GaugeRange(
+                              startValue: 50,
+                              endValue: 100,
+                              color: Colors.green,
+                              startWidth: 20,
+                              endWidth: 20,
+                            ),
+                            // Yellow range - 100 to 150
+                            gauges.GaugeRange(
+                              startValue: 100,
+                              endValue: 150,
+                              color: Colors.yellow[700]!,
+                              startWidth: 20,
+                              endWidth: 20,
+                            ),
+                            // Orange/Red range - 150 to 200
+                            gauges.GaugeRange(
+                              startValue: 150,
+                              endValue: 200,
+                              color: Colors.deepOrange,
+                              startWidth: 20,
+                              endWidth: 20,
+                            ),
+                          ],
+                          pointers: <gauges.GaugePointer>[
+                            gauges.NeedlePointer(
+                              value: _currentHeatIndex,
+                              enableAnimation: true,
+                              animationDuration: 1500,
+                              animationType: gauges.AnimationType.easeOutBack,
+                              needleColor: Colors.black,
+                              needleStartWidth: 1,
+                              needleEndWidth: 4,
+                              needleLength: 0.8,
+                              knobStyle: gauges.KnobStyle(
+                                color: Colors.black,
+                                borderColor: Colors.black,
+                                borderWidth: 0.5,
+                                knobRadius: 8,
                               ),
-                            );
-                          },
-                        ),
+                            )
+                          ],
+                          annotations: <gauges.GaugeAnnotation>[
+                            gauges.GaugeAnnotation(
+                              widget: Container(
+                                padding: EdgeInsets.only(top: 40),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _currentHeatIndex.round().toString(),
+                                      style: TextStyle(
+                                        fontSize: 72,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.black,
+                                        height: 1.0,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      _getHeatIndexStatus(_currentHeatIndex),
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[700],
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Heat Ratio',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[500],
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              angle: 90,
+                              positionFactor: 0.5,
+                            )
+                          ],
+                          axisLabelStyle: gauges.GaugeTextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 40),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
                         Text(
-                          heatStatus,
+                          'Low',
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: _getHeatColor(currentHeatIndex.toDouble()),
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 4),
                         Text(
-                          'Heat Ratio',
+                          'High',
                           style: TextStyle(
-                            fontSize: 14,
                             color: Colors.grey[600],
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
-                    // Scale Labels
-                    Positioned(
-                      bottom: 40,
-                      left: 40,
-                      child: Text(
-                        'Low',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 40,
-                      right: 40,
-                      child: Text(
-                        'High',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    // Scale Numbers
-                    Positioned(
-                      left: 20,
-                      top: 120,
-                      child: Text(
-                        '50',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ),
-                    Positioned(
-                      top: 20,
-                      left: 100,
-                      child: Text(
-                        '100',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ),
-                    Positioned(
-                      top: 20,
-                      right: 100,
-                      child: Text(
-                        '150',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ),
-                    Positioned(
-                      right: 20,
-                      top: 120,
-                      child: Text(
-                        '200',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
 
-            const SizedBox(height: 40),
-
-            // Next Hours Chart
+            // Next Hours Chart Card - Redesigned to match mockup
             Container(
-              padding: const EdgeInsets.all(20),
+              margin: EdgeInsets.only(bottom: 24),
+              padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.grey.withOpacity(0.08),
                     spreadRadius: 1,
-                    blurRadius: 3,
+                    blurRadius: 15,
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
@@ -435,57 +561,80 @@ class _HeatwaveScreenState extends State<HeatwaveScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Next hours',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 20,
                           fontWeight: FontWeight.w600,
                           color: Colors.black87,
                         ),
                       ),
                       Text(
-                        'Updated few min ago', // Dynamic text or remove if not real-time
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                        _isLoading ? 'Updating...' : 'Updated 4 min ago',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
-                    _currentCity,
-                    style: const TextStyle(
+                    'Today',
+                    style: TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black54,
+                      color: Colors.grey[600],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    height: 120,
-                    child: hourlyData.isEmpty
-                        ? const Center(child: Text('No hourly data available'))
-                        : CustomPaint(
-                            size: Size(
-                                MediaQuery.of(context).size.width - 80, 120),
-                            painter: HourlyChartPainter(hourlyData),
-                          ),
+                  SizedBox(height: 20),
+                  Container(
+                    height: 180,
+                    child: SfCartesianChart(
+                      plotAreaBorderWidth: 0,
+                      margin: EdgeInsets.zero,
+                      primaryXAxis: CategoryAxis(
+                        axisLine: AxisLine(width: 0),
+                        majorTickLines: MajorTickLines(size: 0),
+                        majorGridLines: MajorGridLines(width: 0),
+                        labelStyle: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 11,
+                        ),
+                      ),
+                      primaryYAxis: NumericAxis(
+                        isVisible: false,
+                        minimum: 30,
+                        maximum: 150,
+                      ),
+                      series: <CartesianSeries<ChartData, String>>[
+                        ColumnSeries<ChartData, String>(
+                          dataSource: _hourlyData,
+                          xValueMapper: (ChartData data, _) => data.time,
+                          yValueMapper: (ChartData data, _) => data.value,
+                          pointColorMapper: (ChartData data, _) => data.color,
+                          borderRadius: BorderRadius.circular(3),
+                          width: 0.7,
+                          spacing: 0.1,
+                        )
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 30),
-
-            // Weather Forecast
+            // Weather Forecast Card - Redesigned to match mockup
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.grey.withOpacity(0.08),
                     spreadRadius: 1,
-                    blurRadius: 3,
+                    blurRadius: 15,
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
@@ -495,328 +644,96 @@ class _HeatwaveScreenState extends State<HeatwaveScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Weather',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 20,
                           fontWeight: FontWeight.w600,
                           color: Colors.black87,
                         ),
                       ),
                       Text(
                         'This week',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
-                  weeklyWeather.isEmpty
-                      ? const Center(
-                          child: Text('No weekly forecast available'))
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: weeklyWeather.map((weather) {
-                            return Column(
-                              children: [
-                                Text(
-                                  weather['day'],
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  width: 4,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: weather['color'],
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  weather['temp'],
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Icon(
-                                  weather['icon'],
-                                  size: 20,
-                                  color: Colors.grey[600],
-                                ),
-                              ],
-                            );
-                          }).toList(),
+                  SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: _weeklyWeather.map((weather) {
+                      return Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              weather.day,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Container(
+                              width: 30,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: weather.color,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              '${weather.temperature}°',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Icon(
+                              weather.icon,
+                              size: 24,
+                              color: Colors.grey[600],
+                            ),
+                          ],
                         ),
+                      );
+                    }).toList(),
+                  ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
-}
-
-// HeatMeterPainter: CustomPainter for the circular heat index meter
-class HeatMeterPainter extends CustomPainter {
-  final double currentHeatIndexValue; // The actual heat index (e.g., 150)
-  final double strokeWidth; // Thickness of the arc
-
-  HeatMeterPainter({
-    required this.currentHeatIndexValue,
-    required this.strokeWidth,
-  });
-
-  // Helper to get color for a specific heat index value range
-  Color _getColorForRange(double value) {
-    if (value <= 80) return Colors.green; // Range 0-80
-    if (value <= 120) return Colors.amber; // Range 81-120
-    if (value <= 150) return Colors.orange; // Range 121-150
-    return Colors.red.shade700; // Range 151-200 (darker red/brown)
-  }
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width - strokeWidth) / 2;
-    const startAngle = math.pi; // Start from 180 degrees (left side)
-    const totalSweepAngle = math.pi; // Total half-circle (180 degrees)
-
-    // Define the ranges for colors (based on 0-200 scale mapped to 0-pi angle)
-    // Values are based on the _getHeatColor logic in HeatwaveScreen
-    final greenMax = 80.0;
-    final amberMax = 120.0;
-    final orangeMax = 150.0;
-    final redMax = 200.0;
-
-    // Draw the segmented background arcs (Green, Amber, Orange, Dark Red/Brown)
-    // 1. Green Segment (0 to 80)
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle, // Start at 180 degrees
-      (greenMax / redMax) * totalSweepAngle, // Sweep for green
-      false,
-      Paint()
-        ..color = _getColorForRange(70) // Color for the green segment
-        ..strokeWidth = strokeWidth
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.butt, // Use butt for continuous segments
-    );
-
-    // 2. Amber Segment (81 to 120)
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle + (greenMax / redMax) * totalSweepAngle, // Start after green
-      ((amberMax - greenMax) / redMax) * totalSweepAngle, // Sweep for amber
-      false,
-      Paint()
-        ..color = _getColorForRange(100) // Color for the amber segment
-        ..strokeWidth = strokeWidth
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.butt,
-    );
-
-    // 3. Orange Segment (121 to 150)
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle + (amberMax / redMax) * totalSweepAngle, // Start after amber
-      ((orangeMax - amberMax) / redMax) * totalSweepAngle, // Sweep for orange
-      false,
-      Paint()
-        ..color = _getColorForRange(140) // Color for the orange segment
-        ..strokeWidth = strokeWidth
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.butt,
-    );
-
-    // 4. Dark Red/Brown Segment (151 to 200)
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle + (orangeMax / redMax) * totalSweepAngle, // Start after orange
-      ((redMax - orangeMax) / redMax) * totalSweepAngle, // Sweep for dark red
-      false,
-      Paint()
-        ..color = _getColorForRange(180) // Color for the dark red segment
-        ..strokeWidth = strokeWidth
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.butt,
-    );
-
-    // Draw the circular indicator (the "dragger")
-    // Calculate the angle corresponding to the current heat index
-    final indicatorAngle = (currentHeatIndexValue / redMax) * totalSweepAngle;
-
-    // Calculate the position of the indicator circle
-    final indicatorX =
-        center.dx + radius * math.cos(startAngle + indicatorAngle);
-    final indicatorY =
-        center.dy + radius * math.sin(startAngle + indicatorAngle);
-
-    // Draw the indicator circle
-    canvas.drawCircle(
-      Offset(indicatorX, indicatorY),
-      strokeWidth / 2 +
-          3, // Radius of the indicator circle (slightly larger than arc thickness)
-      Paint()
-        ..color =
-            Colors.white, // Color of the indicator circle (white in image)
-    );
-    canvas.drawCircle(
-      // Draw a small inner circle to make it look like a dot inside
-      Offset(indicatorX, indicatorY),
-      strokeWidth / 2 - 2, // Slightly smaller radius
-      Paint()..color = Colors.green, // Color of the inner dot (green in image)
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant HeatMeterPainter oldDelegate) {
-    return oldDelegate.currentHeatIndexValue != currentHeatIndexValue ||
-        oldDelegate.strokeWidth != strokeWidth;
+  void dispose() {
+    _locationController.dispose();
+    super.dispose();
   }
 }
 
-// HourlyChartPainter: CustomPainter for the bar chart showing hourly data
-class HourlyChartPainter extends CustomPainter {
-  final List<double> data; // List of heat index values for each hour
+class ChartData {
+  final String time;
+  final double value;
+  final Color color;
 
-  HourlyChartPainter(this.data);
+  ChartData(this.time, this.value, this.color);
+}
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return; // Don't draw if no data
+class WeatherData {
+  final String day;
+  final int temperature;
+  final Color color;
+  final IconData icon;
 
-    // Paint for drawing the bars
-    final barPaint = Paint()
-      ..strokeWidth = 3 // Not directly used for fill, but good to have
-      ..style = PaintingStyle.fill; // Fill the rectangles
-
-    // Calculate width for each bar
-    final barWidth = size.width / data.length;
-
-    // Determine min/max values for scaling the bar heights
-    final maxValue = data.reduce(math.max);
-    final minValue = data.reduce(math.min);
-    final valueRange = maxValue - minValue;
-
-    // Adjust scaling: If all values are the same, prevent division by zero.
-    // Also, ensure there's some base height for bars even if values are low.
-    final effectiveValueRange =
-        valueRange == 0 ? (maxValue == 0 ? 1 : maxValue) : valueRange;
-    final minChartHeight = 20.0; // Minimum height for a bar to be visible
-
-    for (int i = 0; i < data.length; i++) {
-      final value = data[i];
-      // Normalize value to a 0-1 range based on min/max of the data
-      final normalizedValue = (value - minValue) / effectiveValueRange;
-
-      // Calculate bar height. Scale to 80% of chart height, leaving space for labels.
-      double barHeight =
-          normalizedValue * (size.height * 0.8 - minChartHeight) +
-              minChartHeight;
-      if (barHeight > size.height * 0.8)
-        barHeight = size.height * 0.8; // Cap height
-      if (barHeight < minChartHeight)
-        barHeight = minChartHeight; // Ensure minimum height
-
-      // Determine bar color based on heat index value
-      Color barColor;
-      if (value <= 80) {
-        barColor = Colors.green;
-      } else if (value <= 120) {
-        barColor = Colors.yellow;
-      } else if (value <= 150) {
-        barColor = Colors.orange;
-      } else {
-        barColor = Colors.red;
-      }
-
-      barPaint.color = barColor;
-
-      // Define the rectangle for the current bar
-      final rect = Rect.fromLTWH(
-        i * barWidth + barWidth * 0.2, // X position + padding
-        size.height -
-            barHeight -
-            20, // Y position (from bottom up) - 20 for time labels
-        barWidth * 0.6, // Width of the bar
-        barHeight,
-      );
-
-      // Draw rounded rectangle for the bar
-      final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(2));
-      canvas.drawRRect(rrect, barPaint);
-
-      // Draw hourly labels (e.g., "00:00", "03:00")
-      if (i % 3 == 0) {
-        // Label every 3 hours
-        final textPainter = TextPainter(
-          text: TextSpan(
-            text: '${i.toString().padLeft(2, '0')}:00',
-            style: TextStyle(color: Colors.grey[600], fontSize: 10),
-          ),
-          textDirection:
-              ui.TextDirection.ltr, // CORRECTED: Removed `ui.` prefix
-        );
-        textPainter.layout();
-        textPainter.paint(
-          canvas,
-          Offset(i * barWidth + barWidth * 0.1, size.height - 15),
-        );
-      }
-    }
-
-    // Paint for text labels (min/mid/max values on the left side)
-    final valueTextPaint = TextPainter(
-      textDirection: ui.TextDirection.ltr, // CORRECTED: Removed `ui.` prefix
-      textAlign: TextAlign.right,
-    );
-
-    // Max Value Label
-    valueTextPaint.text = TextSpan(
-      text: maxValue.round().toString(),
-      style: TextStyle(color: Colors.grey[600], fontSize: 10),
-    );
-    valueTextPaint.layout();
-    valueTextPaint.paint(
-        canvas, Offset(-valueTextPaint.width - 5, size.height * 0.1));
-
-    // Mid Value Label
-    final midValue = (minValue + maxValue) / 2;
-    valueTextPaint.text = TextSpan(
-      text: midValue.round().toString(),
-      style: TextStyle(color: Colors.grey[600], fontSize: 10),
-    );
-    valueTextPaint.layout();
-    valueTextPaint.paint(
-        canvas,
-        Offset(-valueTextPaint.width - 5,
-            size.height * 0.5 - valueTextPaint.height / 2));
-
-    // Min Value Label
-    valueTextPaint.text = TextSpan(
-      text: minValue.round().toString(),
-      style: TextStyle(color: Colors.grey[600], fontSize: 10),
-    );
-    valueTextPaint.layout();
-    valueTextPaint.paint(
-        canvas,
-        Offset(-valueTextPaint.width - 5,
-            size.height * 0.8 - valueTextPaint.height));
-  }
-
-  @override
-  // Repaint if the data changes
-  bool shouldRepaint(covariant HourlyChartPainter oldDelegate) {
-    return oldDelegate.data != data;
-  }
+  WeatherData(this.day, this.temperature, this.color, this.icon);
 }

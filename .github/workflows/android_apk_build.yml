@@ -1,0 +1,55 @@
+# .github/workflows/android_apk_build.yml
+
+name: Flutter Android APK Build
+
+# Controls when the workflow will run
+on:
+  push:
+    branches:
+      - main # Triggers the workflow on push events to the main branch
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build_apk:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks out your repository under $GITHUB_WORKSPACE, so your workflow can access it
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Set up Java Development Kit (JDK)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin' # Recommended distribution for Flutter builds
+          java-version: '17' # Flutter requires JDK 17 for recent versions of Android Gradle Plugin
+
+      # Set up Flutter SDK
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x.x' # Specify your Flutter version, e.g., '3.19.x' or '3.22.x'
+          channel: 'stable' # or 'beta', 'master'
+
+      # Get Flutter project dependencies
+      - name: Get Flutter Dependencies
+        run: flutter pub get
+
+      # Build the Android APK in release mode
+      - name: Build Android APK
+        run: flutter build apk --release
+
+      # Upload the generated APK as a workflow artifact
+      # The APK will be available in the workflow run details for download
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 5 # How long to keep the artifact

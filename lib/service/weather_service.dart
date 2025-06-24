@@ -76,7 +76,7 @@ class WeatherService {
       }
     } catch (e) {
       if (e is Exception) {
-        throw e;
+        rethrow;
       } else {
         throw Exception(
             'An unexpected error occurred during weather fetch: ${e.toString()}');

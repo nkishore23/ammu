@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'signup_page.dart';
 import 'login_page.dart';
 import 'dart:async';
 import 'database_helper.dart';
-
+import 'firebase_options.dart';
 import 'add_device_screen.dart';
 
-void main() {
+void main() async {
+  // Initialize Firebase
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const AmmuApp());
 }
 
@@ -29,7 +35,7 @@ class AmmuApp extends StatelessWidget {
         '/splash': (context) => const SplashScreen(),
         '/signup': (context) => const SignUpPage(),
         '/login': (context) => const LoginPage(),
-        '/home': (context) => const AddDeviceScreen(),
+        '/bluetooth': (context) => const BluetoothScreen(),
       },
     );
   }

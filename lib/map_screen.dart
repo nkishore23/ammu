@@ -11,6 +11,8 @@ void main() async {
 }
 
 class MapScreen extends StatefulWidget {
+  const MapScreen({super.key});
+
   @override
   _MapScreenState createState() => _MapScreenState();
 }
@@ -19,10 +21,10 @@ class _MapScreenState extends State<MapScreen> {
   GoogleMapController? mapController;
   final LatLng _initialCameraPosition =
       LatLng(13.0827, 80.2707); // Chennai, India
-  Set<Marker> _markers = {};
-  Set<Polyline> _polylines = {};
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
 
-  TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {

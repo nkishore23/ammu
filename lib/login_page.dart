@@ -1,6 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'database_helper.dart'; // Import database helper
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
+import 'package:google_sign_in/google_sign_in.dart'; // Import Google Sign-In
+// Removed: import 'package:cloud_firestore/cloud_firestore.dart'; // Removed Cloud Firestore import
+
+import 'signup_page.dart'; // Import the signup page
+
+// You might still have database_helper.dart for other app data,
+// but for user authentication, we're now using Firebase Auth.
+// If database_helper.dart ONLY contains user authentication logic,
+// you can consider removing its import here.
+// import 'database_helper.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,9 +23,17 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // Initialize GoogleSignIn with the webClientId for web support
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId:
+        '591533067808-m9cnoj8bqng1p18bv014t9djdajk1iig.apps.googleusercontent.com',
+  );
+  // Removed: final FirebaseFirestore _firestore = FirebaseFirestore.instance; // Removed Firestore instance
 
   @override
   void dispose() {
@@ -24,26 +42,32 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  // Email/Mobile validation
+  // Email/Mobile validation (Note: Firebase Auth primarily uses email for direct email/password login.
+  // If you want to allow mobile number login, you'd typically use Firebase Phone Authentication.
+  // For this implementation, we'll validate it as an email and let Firebase handle the lookup.
+  // The mobile validation is primarily for UI guidance if the user tries to enter a mobile number).
   bool _isValidEmailOrMobile(String input) {
     // Check if it's a valid email
     bool isEmail = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(input);
-    // Check if it's a valid 10-digit mobile number
+    // Check if it's a valid 10-digit mobile number (for UI hint, not direct Firebase Auth login)
     bool isMobile = RegExp(r'^[0-9]{10}$').hasMatch(input);
     return isEmail || isMobile;
   }
 
-  // Handle login
-  Future<void> _handleLogin() async {
+  // Handle email/password login
+  Future<void> _handleEmailPasswordLogin() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
       });
 
       try {
-        // Login user with database
-        final result = await DatabaseHelper().loginUser(
-          emailOrMobile: _emailController.text.trim(),
+        // Attempt to sign in with email and password
+        // Firebase Auth's signInWithEmailAndPassword expects an email.
+        // If you were truly supporting mobile number login, you'd use Firebase Phone Auth.
+        // For this example, we assume the user enters their email even if the field suggests mobile.
+        UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+          email: _emailController.text.trim(),
           password: _passwordController.text,
         );
 
@@ -52,42 +76,136 @@ class _LoginPageState extends State<LoginPage> {
         });
 
         if (mounted) {
-          if (result['success']) {
-            final user = result['user'] as User;
-            
-            // Show success message
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Welcome back, ${user.email}!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            
-            // Navigate to home page
-            Navigator.pushReplacementNamed(context, '/home');
-          } else {
-            // Show error message
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(result['message']),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
+          // If login is successful, userCredential.user will not be null
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Welcome back, ${userCredential.user?.email ?? 'User'}!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Navigate to Bluetooth page
+          Navigator.pushReplacementNamed(context, '/bluetooth');
+        }
+      } on FirebaseAuthException catch (e) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        String errorMessage;
+        if (e.code == 'user-not-found') {
+          errorMessage = 'No user found for that email.';
+        } else if (e.code == 'wrong-password') {
+          errorMessage = 'Wrong password provided for that user.';
+        } else if (e.code == 'invalid-email') {
+          errorMessage = 'The email address is not valid.';
+        } else {
+          errorMessage = 'Login failed: ${e.message}';
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       } catch (e) {
         setState(() {
           _isLoading = false;
         });
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Login failed: ${e.toString()}'),
+              content: Text('An unexpected error occurred: ${e.toString()}'),
               backgroundColor: Colors.red,
             ),
           );
         }
+      }
+    }
+  }
+
+  // Handle Google Sign-In
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+
+      if (googleUser == null) {
+        // The user canceled the sign-in
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      UserCredential userCredential =
+          await _auth.signInWithCredential(credential);
+
+      // Removed: Optional: Fetch or store user data in Firestore after successful Google login
+      // Removed: if (userCredential.user != null) {
+      // Removed:   final userDoc = await _firestore.collection('users').doc(userCredential.user!.uid).get();
+      // Removed:   if (!userDoc.exists) {
+      // Removed:     await _firestore.collection('users').doc(userCredential.user!.uid).set({
+      // Removed:       'email': userCredential.user!.email,
+      // Removed:       'displayName': userCredential.user!.displayName ?? googleUser.displayName,
+      // Removed:       'photoURL': userCredential.user!.photoURL ?? googleUser.photoUrl,
+      // Removed:       'createdAt': FieldValue.serverTimestamp(),
+      // Removed:     }, SetOptions(merge: true));
+      // Removed:   }
+      // Removed: }
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Signed in with Google successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pushReplacementNamed(context, '/bluetooth');
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google Sign-in failed: ${e.message}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'An unexpected error during Google Sign-in: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -124,25 +242,17 @@ class _LoginPageState extends State<LoginPage> {
                 clipper: LoginCurveClipper(),
                 child: Container(
                   height: 380,
-                  decoration: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF1e3c72),
-                      Color(0xFF2a5298),
-                    ],
-                  ).createShader(const Rect.fromLTWH(0, 0, 400, 380)) != null
-                      ? BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFF1e3c72),
-                              Color(0xFF2a5298),
-                            ],
-                          ),
-                        )
-                      : const BoxDecoration(color: Color(0xFF003366)),
+                  decoration: const BoxDecoration(
+                    // Changed to BoxDecoration for direct color
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF1e3c72),
+                        Color(0xFF2a5298),
+                      ],
+                    ),
+                  ),
                   child: Stack(
                     children: [
                       // Main illustration
@@ -260,6 +370,10 @@ class _LoginPageState extends State<LoginPage> {
                           if (value == null || value.isEmpty) {
                             return 'Please enter your email or mobile number';
                           }
+                          // This validation only checks for email/10-digit mobile format.
+                          // Firebase Email/Password login specifically expects an email.
+                          // If a mobile number is entered here, Firebase Auth will likely fail
+                          // unless Phone Auth is implemented and used for mobile login.
                           if (!_isValidEmailOrMobile(value)) {
                             return 'Please enter a valid email or 10-digit mobile number';
                           }
@@ -321,7 +435,9 @@ class _LoginPageState extends State<LoginPage> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: _isLoading ? null : _handleLogin,
+                          onPressed: _isLoading
+                              ? null
+                              : _handleEmailPasswordLogin, // Changed handler
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF003366),
                             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -336,7 +452,8 @@ class _LoginPageState extends State<LoginPage> {
                                   width: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
                                   ),
                                 )
                               : const Text(
@@ -363,13 +480,18 @@ class _LoginPageState extends State<LoginPage> {
                             GestureDetector(
                               onTap: () {
                                 // Navigate to sign up page
-                                Navigator.pushNamed(context, '/signup');
+                                Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (context) =>
+                                            const SignUpPage())); // Using direct route
                               },
                               child: const Text(
                                 'Sign Up',
                                 style: TextStyle(
                                   color: Color(0xFF003366),
                                   fontWeight: FontWeight.bold,
+                                  decoration: TextDecoration.underline,
                                 ),
                               ),
                             ),
@@ -381,7 +503,9 @@ class _LoginPageState extends State<LoginPage> {
                       // Divider
                       Row(
                         children: [
-                          Expanded(child: Container(height: 1, color: Colors.grey[300])),
+                          Expanded(
+                              child: Container(
+                                  height: 1, color: Colors.grey[300])),
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
@@ -389,7 +513,9 @@ class _LoginPageState extends State<LoginPage> {
                               style: TextStyle(color: Colors.grey),
                             ),
                           ),
-                          Expanded(child: Container(height: 1, color: Colors.grey[300])),
+                          Expanded(
+                              child: Container(
+                                  height: 1, color: Colors.grey[300])),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -402,7 +528,7 @@ class _LoginPageState extends State<LoginPage> {
                               'Google',
                               Icons.g_mobiledata,
                               Colors.red,
-                              () => _launchURL("https://accounts.google.com/"),
+                              _handleGoogleSignIn, // Changed handler
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -411,7 +537,8 @@ class _LoginPageState extends State<LoginPage> {
                               'Facebook',
                               Icons.facebook,
                               Colors.blue,
-                              () => _launchURL("https://www.facebook.com/login"),
+                              () => _launchURL(
+                                  "https://www.facebook.com/login"), // Still launching URL
                             ),
                           ),
                         ],
@@ -509,7 +636,8 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildSocialButton(String text, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildSocialButton(
+      String text, IconData icon, Color color, VoidCallback onTap) {
     return OutlinedButton.icon(
       onPressed: onTap,
       icon: Icon(icon, color: color, size: 20),
@@ -532,7 +660,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-// Custom Clipper for Login Page Curve
+// Custom Clipper for Login Page Curve (remains the same)
 class LoginCurveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
@@ -548,3 +676,54 @@ class LoginCurveClipper extends CustomClipper<Path> {
   @override
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
+
+/* // A simple placeholder for HomePage for navigation. Create this file if it doesn't exist.
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Home Page'),
+        backgroundColor: const Color(0xFF003366),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'You have successfully logged in!',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                await FirebaseAuth.instance.signOut();
+                if (context.mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF003366),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text(
+                'Sign Out',
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+ */
