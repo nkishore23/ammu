@@ -34,7 +34,10 @@ jobs:
       - name: Set up Flutter SDK
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x.x' # Specify your Flutter version, e.g., '3.19.x' or '3.22.x'
+          # IMPORTANT: Specify a concrete, stable Flutter version.
+          # You can find the latest stable version by running 'flutter --version' locally.
+          # Example: '3.22.2'
+          flutter-version: '3.22.2' # Changed from '3.x.x' to a specific stable version
           channel: 'stable' # or 'beta', 'master'
 
       # Get Flutter project dependencies
