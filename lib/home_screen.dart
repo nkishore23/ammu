@@ -515,8 +515,7 @@ class _HomeTabPageState extends State<HomeTabPage>
   }
 }
 
-// screens/app_drawer.dart (part of HomeScreen, but separated for clarity)
-/// The application's drawer, providing navigation to various sections and logout.
+
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
@@ -608,7 +607,6 @@ class AppDrawer extends StatelessWidget {
   }
 }
 
-// screens/addallcontactsscreen.dart (Placeholder)
 class AddAllContactsScreen extends StatelessWidget {
   const AddAllContactsScreen({super.key});
 
